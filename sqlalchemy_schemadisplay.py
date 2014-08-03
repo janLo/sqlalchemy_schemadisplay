@@ -1,6 +1,6 @@
 # updated SQLA schema display to work with pydot 1.0.2
 
-from sqlalchemy.orm.properties import PropertyLoader
+from sqlalchemy.orm.properties import RelationshipProperty
 from sqlalchemy.orm import sync
 import pydot
 import types
@@ -50,7 +50,7 @@ def create_uml_graph(mappers, show_operations=True, show_attributes=True, show_i
             graph.add_edge(pydot.Edge(escape(mapper.inherits.class_.__name__),escape(mapper.class_.__name__),
                 arrowhead='none',arrowtail='empty', style="setlinewidth(%s)" % linewidth, arrowsize=str(linewidth)))
         for loader in mapper.iterate_properties:
-            if isinstance(loader, PropertyLoader) and loader.mapper in mappers:
+            if isinstance(loader, RelationshipProperty) and loader.mapper in mappers:
                 if hasattr(loader, 'reverse_property'):
                     relations.add(frozenset([loader, loader.reverse_property]))
                 else:
@@ -137,14 +137,14 @@ def create_schema_graph(tables=None, metadata=None, show_indexes=True, show_data
     }
     relation_kwargs.update(relation_options)
 
-    if not metadata and len(tables):
+    if metadata is None and tables is not None and len(tables):
         metadata = tables[0].metadata
-    elif not tables and metadata:
+    elif tables is None and metadata is not None:
         if not len(metadata.tables):
             metadata.reflect()
         tables = list(metadata.tables.values())
     else:
-        raise Exception("You need to specify at least tables or metadata")
+        raise ValueError("You need to specify at least tables or metadata")
 
     graph = pydot.Dot(prog="dot",mode="ipsep",overlap="ipsep",sep="0.01",concentrate=str(concentrate), rankdir=rankdir)
     for table in tables:
@@ -156,6 +156,8 @@ def create_schema_graph(tables=None, metadata=None, show_indexes=True, show_data
 
     for table in tables:
         for fk in table.foreign_keys:
+            if fk.column.table not in tables:
+                continue
             edge = [table.name, fk.column.table.name]
             is_inheritance = fk.parent.primary_key and fk.column.primary_key
             if is_inheritance:
